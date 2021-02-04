@@ -10,7 +10,8 @@ import (
 	"os"
 
 	firebase "firebase.google.com/go"
-	"github.com/nattawat.s/golang-firebase-cloud-storage/models"
+	guuid "github.com/google/uuid"
+	"golang-firebase-cloud-storage/models"
 
 	"cloud.google.com/go/firestore"
 	cloud "cloud.google.com/go/storage"
@@ -108,6 +109,10 @@ func (route *App) UploadImage(w http.ResponseWriter, r *http.Request) {
 	bucket := "golang-cloud-firestore.appspot.com"
 
 	wc := route.storage.Bucket(bucket).Object(imagePath).NewWriter(route.ctx)
+	uuid := guuid.New()
+	wc.Metadata = map[string]string{
+		"firebaseStorageDownloadTokens": uuid.String(),
+	}
 	_, err = io.Copy(wc, file)
 	if err != nil {
 		respondWithJSON(w, http.StatusBadRequest, err.Error())
@@ -119,7 +124,7 @@ func (route *App) UploadImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = CreateImageUrl(imagePath, bucket, route.ctx, route.client)
+	err = CreateImageUrl(imagePath, bucket, route.ctx, route.client, uuid)
 	if err != nil {
 		respondWithJSON(w, http.StatusBadRequest, err.Error())
 		return
@@ -128,10 +133,10 @@ func (route *App) UploadImage(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusCreated, "Create image success.")
 }
 
-func CreateImageUrl(imagePath string, bucket string, ctx context.Context, client *firestore.Client) error {
+func CreateImageUrl(imagePath string, bucket string, ctx context.Context, client *firestore.Client, uuid guuid.UUID) error {
 	imageStructure := models.ImageStructure{
 		ImageName: imagePath,
-		URL:       "https://storage.cloud.google.com/" + bucket + "/" + imagePath,
+		URL:       fmt.Sprintf("https://firebasestorage.googleapis.com/v0/b/%s/o/%s?alt=media&token=%s", bucket, imagePath, uuid.String()),
 	}
 
 	_, _, err := client.Collection("image").Add(ctx, imageStructure)
